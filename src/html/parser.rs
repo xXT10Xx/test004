@@ -128,3 +128,127 @@ impl<'a> HtmlParser<'a> {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_simple_element() {
+        let mut parser = HtmlParser::new("<div>Hello</div>");
+        let nodes = parser.parse();
+        
+        assert_eq!(nodes.len(), 1);
+        
+        if let Node::Element(element) = &nodes[0] {
+            assert_eq!(element.tag_name, "div");
+            assert_eq!(element.children.len(), 1);
+            
+            if let Node::Text(text) = &element.children[0] {
+                assert_eq!(text, "Hello");
+            } else {
+                panic!("Expected text node");
+            }
+        } else {
+            panic!("Expected element node");
+        }
+    }
+
+    #[test]
+    fn test_nested_elements() {
+        let mut parser = HtmlParser::new("<div><span>Hello</span><p>World</p></div>");
+        let nodes = parser.parse();
+        
+        assert_eq!(nodes.len(), 1);
+        
+        if let Node::Element(div) = &nodes[0] {
+            assert_eq!(div.tag_name, "div");
+            assert_eq!(div.children.len(), 2);
+            
+            if let Node::Element(span) = &div.children[0] {
+                assert_eq!(span.tag_name, "span");
+                assert_eq!(span.children.len(), 1);
+            } else {
+                panic!("Expected span element");
+            }
+            
+            if let Node::Element(p) = &div.children[1] {
+                assert_eq!(p.tag_name, "p");
+                assert_eq!(p.children.len(), 1);
+            } else {
+                panic!("Expected p element");
+            }
+        } else {
+            panic!("Expected div element");
+        }
+    }
+
+    #[test]
+    fn test_attributes() {
+        let mut parser = HtmlParser::new(r#"<div class="container" id="main">Content</div>"#);
+        let nodes = parser.parse();
+        
+        assert_eq!(nodes.len(), 1);
+        
+        if let Node::Element(element) = &nodes[0] {
+            assert_eq!(element.tag_name, "div");
+            assert_eq!(element.attributes.get("class"), Some(&"container".to_string()));
+            assert_eq!(element.attributes.get("id"), Some(&"main".to_string()));
+        } else {
+            panic!("Expected element node");
+        }
+    }
+
+    #[test]
+    fn test_self_closing_tag() {
+        let mut parser = HtmlParser::new("<img src='test.jpg' alt='Test'/>");
+        let nodes = parser.parse();
+        
+        assert_eq!(nodes.len(), 1);
+        
+        if let Node::Element(element) = &nodes[0] {
+            assert_eq!(element.tag_name, "img");
+            assert_eq!(element.children.len(), 0);
+            assert_eq!(element.attributes.get("src"), Some(&"test.jpg".to_string()));
+            assert_eq!(element.attributes.get("alt"), Some(&"Test".to_string()));
+        } else {
+            panic!("Expected element node");
+        }
+    }
+
+    #[test]
+    fn test_void_elements() {
+        let mut parser = HtmlParser::new("<br><hr><img>");
+        let nodes = parser.parse();
+        
+        assert_eq!(nodes.len(), 3);
+        
+        for node in &nodes {
+            if let Node::Element(element) = node {
+                assert_eq!(element.children.len(), 0);
+            } else {
+                panic!("Expected element nodes");
+            }
+        }
+    }
+
+    #[test]
+    fn test_comments() {
+        let mut parser = HtmlParser::new("<!-- Comment --><div>Content</div>");
+        let nodes = parser.parse();
+        
+        assert_eq!(nodes.len(), 2);
+        
+        if let Node::Comment(comment) = &nodes[0] {
+            assert_eq!(comment, " Comment ");
+        } else {
+            panic!("Expected comment node");
+        }
+        
+        if let Node::Element(element) = &nodes[1] {
+            assert_eq!(element.tag_name, "div");
+        } else {
+            panic!("Expected element node");
+        }
+    }
+}

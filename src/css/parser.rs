@@ -275,3 +275,142 @@ impl<'a> CssParser<'a> {
         self.current_token = self.tokenizer.next_token();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_simple_rule() {
+        let mut parser = CssParser::new("div { color: red; }");
+        let rules = parser.parse();
+        
+        assert_eq!(rules.len(), 1);
+        
+        let rule = &rules[0];
+        assert_eq!(rule.selectors.len(), 1);
+        assert!(matches!(rule.selectors[0], Selector::Type(ref name) if name == "div"));
+        assert_eq!(rule.declarations.get("color"), Some(&"red".to_string()));
+    }
+
+    #[test]
+    fn test_multiple_selectors() {
+        let mut parser = CssParser::new("div, p, span { margin: 0; }");
+        let rules = parser.parse();
+        
+        assert_eq!(rules.len(), 1);
+        
+        let rule = &rules[0];
+        assert_eq!(rule.selectors.len(), 3);
+        assert!(matches!(rule.selectors[0], Selector::Type(ref name) if name == "div"));
+        assert!(matches!(rule.selectors[1], Selector::Type(ref name) if name == "p"));
+        assert!(matches!(rule.selectors[2], Selector::Type(ref name) if name == "span"));
+    }
+
+    #[test]
+    fn test_class_selector() {
+        let mut parser = CssParser::new(".container { width: 100%; }");
+        let rules = parser.parse();
+        
+        assert_eq!(rules.len(), 1);
+        
+        let rule = &rules[0];
+        assert_eq!(rule.selectors.len(), 1);
+        assert!(matches!(rule.selectors[0], Selector::Class(ref name) if name == "container"));
+        assert_eq!(rule.declarations.get("width"), Some(&"100%".to_string()));
+    }
+
+    #[test]
+    fn test_id_selector() {
+        let mut parser = CssParser::new("#main { display: block; }");
+        let rules = parser.parse();
+        
+        assert_eq!(rules.len(), 1);
+        
+        let rule = &rules[0];
+        assert_eq!(rule.selectors.len(), 1);
+        assert!(matches!(rule.selectors[0], Selector::Id(ref name) if name == "main"));
+        assert_eq!(rule.declarations.get("display"), Some(&"block".to_string()));
+    }
+
+    #[test]
+    fn test_universal_selector() {
+        let mut parser = CssParser::new("* { box-sizing: border-box; }");
+        let rules = parser.parse();
+        
+        assert_eq!(rules.len(), 1);
+        
+        let rule = &rules[0];
+        assert_eq!(rule.selectors.len(), 1);
+        assert!(matches!(rule.selectors[0], Selector::Universal));
+        assert_eq!(rule.declarations.get("box-sizing"), Some(&"border-box".to_string()));
+    }
+
+    #[test]
+    fn test_descendant_selector() {
+        let mut parser = CssParser::new("div p { font-size: 14px; }");
+        let rules = parser.parse();
+        
+        assert_eq!(rules.len(), 1);
+        
+        let rule = &rules[0];
+        assert_eq!(rule.selectors.len(), 1);
+        
+        if let Selector::Descendant(left, right) = &rule.selectors[0] {
+            assert!(matches!(**left, Selector::Type(ref name) if name == "div"));
+            assert!(matches!(**right, Selector::Type(ref name) if name == "p"));
+        } else {
+            panic!("Expected descendant selector");
+        }
+    }
+
+    #[test]
+    fn test_child_selector() {
+        let mut parser = CssParser::new("div > p { margin: 10px; }");
+        let rules = parser.parse();
+        
+        assert_eq!(rules.len(), 1);
+        
+        let rule = &rules[0];
+        assert_eq!(rule.selectors.len(), 1);
+        
+        if let Selector::Child(left, right) = &rule.selectors[0] {
+            assert!(matches!(**left, Selector::Type(ref name) if name == "div"));
+            assert!(matches!(**right, Selector::Type(ref name) if name == "p"));
+        } else {
+            panic!("Expected child selector");
+        }
+    }
+
+    #[test]
+    fn test_multiple_declarations() {
+        let mut parser = CssParser::new("div { color: red; background: blue; font-size: 16px; }");
+        let rules = parser.parse();
+        
+        assert_eq!(rules.len(), 1);
+        
+        let rule = &rules[0];
+        assert_eq!(rule.declarations.len(), 3);
+        assert_eq!(rule.declarations.get("color"), Some(&"red".to_string()));
+        assert_eq!(rule.declarations.get("background"), Some(&"blue".to_string()));
+        assert_eq!(rule.declarations.get("font-size"), Some(&"16px".to_string()));
+    }
+
+    #[test]
+    fn test_multiple_rules() {
+        let css = r#"
+            div { color: red; }
+            .container { width: 100%; }
+            #main { display: block; }
+        "#;
+        
+        let mut parser = CssParser::new(css);
+        let rules = parser.parse();
+        
+        assert_eq!(rules.len(), 3);
+        
+        assert!(matches!(rules[0].selectors[0], Selector::Type(ref name) if name == "div"));
+        assert!(matches!(rules[1].selectors[0], Selector::Class(ref name) if name == "container"));
+        assert!(matches!(rules[2].selectors[0], Selector::Id(ref name) if name == "main"));
+    }
+}

@@ -81,7 +81,8 @@ impl<'a> CssTokenizer<'a> {
             '"' | '\'' => self.consume_string(current_char),
             '#' => self.consume_hash(),
             '@' => self.consume_at_keyword(),
-            '0'..='9' | '.' => self.consume_number(),
+            '0'..='9' => self.consume_number(),
+            '.' if self.peek_char(1).map_or(false, |c| c.is_ascii_digit()) => self.consume_number(),
             '-' if self.is_number_start() => self.consume_number(),
             'a'..='z' | 'A'..='Z' | '_' | '-' => self.consume_ident_or_url(),
             _ => {
@@ -335,5 +336,112 @@ impl<'a> Iterator for CssTokenizer<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.next_token()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_simple_tokens() {
+        let tokenizer = CssTokenizer::new("{ } ( ) [ ] : ; ,");
+        
+        let tokens: Vec<_> = tokenizer.collect();
+        
+        assert!(matches!(tokens[0], CssToken::LeftBrace));
+        assert!(matches!(tokens[1], CssToken::Whitespace));
+        assert!(matches!(tokens[2], CssToken::RightBrace));
+        assert!(matches!(tokens[3], CssToken::Whitespace));
+        assert!(matches!(tokens[4], CssToken::LeftParen));
+        assert!(matches!(tokens[5], CssToken::Whitespace));
+        assert!(matches!(tokens[6], CssToken::RightParen));
+        assert!(matches!(tokens[7], CssToken::Whitespace));
+        assert!(matches!(tokens[8], CssToken::LeftBracket));
+    }
+
+    #[test]
+    fn test_identifiers() {
+        let tokenizer = CssTokenizer::new("div class-name _private");
+        
+        let tokens: Vec<_> = tokenizer.collect();
+        
+        assert!(matches!(tokens[0], CssToken::Ident("div")));
+        assert!(matches!(tokens[1], CssToken::Whitespace));
+        assert!(matches!(tokens[2], CssToken::Ident("class-name")));
+        assert!(matches!(tokens[3], CssToken::Whitespace));
+        assert!(matches!(tokens[4], CssToken::Ident("_private")));
+    }
+
+    #[test]
+    fn test_numbers() {
+        let tokenizer = CssTokenizer::new("42 3.14 -10 50% 16px");
+        
+        let tokens: Vec<_> = tokenizer.collect();
+        
+        assert!(matches!(tokens[0], CssToken::Number(42.0)));
+        assert!(matches!(tokens[1], CssToken::Whitespace));
+        assert!(matches!(tokens[2], CssToken::Number(3.14)));
+        assert!(matches!(tokens[3], CssToken::Whitespace));
+        assert!(matches!(tokens[4], CssToken::Number(-10.0)));
+        assert!(matches!(tokens[5], CssToken::Whitespace));
+        assert!(matches!(tokens[6], CssToken::Percentage(50.0)));
+        assert!(matches!(tokens[7], CssToken::Whitespace));
+        assert!(matches!(tokens[8], CssToken::Dimension { value: 16.0, unit: "px" }));
+    }
+
+    #[test]
+    fn test_strings() {
+        let tokenizer = CssTokenizer::new(r#""hello" 'world'"#);
+        
+        let tokens: Vec<_> = tokenizer.collect();
+        
+        assert!(matches!(tokens[0], CssToken::String("hello")));
+        assert!(matches!(tokens[1], CssToken::Whitespace));
+        assert!(matches!(tokens[2], CssToken::String("world")));
+    }
+
+    #[test]
+    fn test_hash() {
+        let tokenizer = CssTokenizer::new("#main #ff0000");
+        
+        let tokens: Vec<_> = tokenizer.collect();
+        
+        assert!(matches!(tokens[0], CssToken::Hash("main")));
+        assert!(matches!(tokens[1], CssToken::Whitespace));
+        assert!(matches!(tokens[2], CssToken::Hash("ff0000")));
+    }
+
+    #[test]
+    fn test_at_keyword() {
+        let tokenizer = CssTokenizer::new("@media @import");
+        
+        let tokens: Vec<_> = tokenizer.collect();
+        
+        assert!(matches!(tokens[0], CssToken::AtKeyword("media")));
+        assert!(matches!(tokens[1], CssToken::Whitespace));
+        assert!(matches!(tokens[2], CssToken::AtKeyword("import")));
+    }
+
+    #[test]
+    fn test_url() {
+        let tokenizer = CssTokenizer::new(r#"url(image.png) url("path/to/file.jpg")"#);
+        
+        let tokens: Vec<_> = tokenizer.collect();
+        
+        assert!(matches!(tokens[0], CssToken::Url("image.png")));
+        assert!(matches!(tokens[1], CssToken::Whitespace));
+        assert!(matches!(tokens[2], CssToken::Url("path/to/file.jpg")));
+    }
+
+    #[test]
+    fn test_comments() {
+        let tokenizer = CssTokenizer::new("/* comment */ div");
+        
+        let tokens: Vec<_> = tokenizer.collect();
+        
+        assert!(matches!(tokens[0], CssToken::Comment(" comment ")));
+        assert!(matches!(tokens[1], CssToken::Whitespace));
+        assert!(matches!(tokens[2], CssToken::Ident("div")));
     }
 }

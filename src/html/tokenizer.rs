@@ -43,10 +43,6 @@ impl<'a> HtmlTokenizer<'a> {
         self.input.chars().nth(self.position)
     }
 
-    fn peek_char(&self, offset: usize) -> Option<char> {
-        self.input.chars().nth(self.position + offset)
-    }
-
     fn advance(&mut self) {
         if self.position < self.input.len() {
             self.position += 1;
@@ -268,5 +264,106 @@ impl<'a> Iterator for HtmlTokenizer<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.next_token()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_simple_tag() {
+        let mut tokenizer = HtmlTokenizer::new("<div></div>");
+        
+        assert_eq!(
+            tokenizer.next_token(),
+            Some(HtmlToken::StartTag {
+                name: "div",
+                attributes: vec![],
+                self_closing: false,
+            })
+        );
+        
+        assert_eq!(
+            tokenizer.next_token(),
+            Some(HtmlToken::EndTag { name: "div" })
+        );
+        
+        assert_eq!(tokenizer.next_token(), None);
+    }
+
+    #[test]
+    fn test_tag_with_attributes() {
+        let mut tokenizer = HtmlTokenizer::new(r#"<div class="container" id="main">"#);
+        
+        assert_eq!(
+            tokenizer.next_token(),
+            Some(HtmlToken::StartTag {
+                name: "div",
+                attributes: vec![("class", "container"), ("id", "main")],
+                self_closing: false,
+            })
+        );
+    }
+
+    #[test]
+    fn test_self_closing_tag() {
+        let mut tokenizer = HtmlTokenizer::new("<br/>");
+        
+        assert_eq!(
+            tokenizer.next_token(),
+            Some(HtmlToken::StartTag {
+                name: "br",
+                attributes: vec![],
+                self_closing: true,
+            })
+        );
+    }
+
+    #[test]
+    fn test_text_content() {
+        let mut tokenizer = HtmlTokenizer::new("Hello World");
+        
+        assert_eq!(
+            tokenizer.next_token(),
+            Some(HtmlToken::Text("Hello World"))
+        );
+    }
+
+    #[test]
+    fn test_comment() {
+        let mut tokenizer = HtmlTokenizer::new("<!-- This is a comment -->");
+        
+        assert_eq!(
+            tokenizer.next_token(),
+            Some(HtmlToken::Comment(" This is a comment "))
+        );
+    }
+
+    #[test]
+    fn test_doctype() {
+        let mut tokenizer = HtmlTokenizer::new("<!DOCTYPE html>");
+        
+        assert_eq!(
+            tokenizer.next_token(),
+            Some(HtmlToken::Doctype("!DOCTYPE html"))
+        );
+    }
+
+    #[test]
+    fn test_mixed_content() {
+        let html = r#"<div class="test">Hello <!-- comment --> <span>World</span></div>"#;
+        let tokenizer = HtmlTokenizer::new(html);
+        
+        let tokens: Vec<_> = tokenizer.collect();
+        
+        assert_eq!(tokens.len(), 7);
+        assert!(matches!(tokens[0], HtmlToken::StartTag { name: "div", .. }));
+        assert!(matches!(tokens[1], HtmlToken::Text("Hello ")));
+        assert!(matches!(tokens[2], HtmlToken::Comment(" comment ")));
+        assert!(matches!(tokens[3], HtmlToken::StartTag { name: "span", .. }));
+        assert!(matches!(tokens[4], HtmlToken::Text("World")));
+        assert!(matches!(tokens[5], HtmlToken::EndTag { name: "span" }));
+        assert!(matches!(tokens[6], HtmlToken::EndTag { name: "div" }));
     }
 }
